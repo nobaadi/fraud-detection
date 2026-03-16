@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  #root { height: 100%; }
+  html { scroll-behavior: smooth; }
+  body { scroll-behavior: smooth; }
+
+  body {
+    background: #2a2a2a;
+    color: #e2e8f0;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #2a2a2a; }
+  ::-webkit-scrollbar-thumb { background: #484848; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: #555555; }
+}
+
+@layer components {
+  /* ── cards ── */
+  .card    { @apply rounded-xl p-6;  background: #353535; border: 1px solid rgba(255,255,255,0.09); }
+  .card-sm { @apply rounded-xl p-4;  background: #353535; border: 1px solid rgba(255,255,255,0.09); }
+
+  /* ── badges ── */
+  .badge-high   { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold; background: rgba(239,68,68,0.1);   color: #fca5a5; border: 1px solid rgba(239,68,68,0.22); }
+  .badge-medium { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold; background: rgba(245,158,11,0.1); color: #fcd34d; border: 1px solid rgba(245,158,11,0.22); }
+  .badge-low    { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold; background: rgba(16,185,129,0.08); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.18); }
+
+  /* ── table ── */
+  .table-header { @apply text-xs font-semibold tracking-wider uppercase; color: #7a7a8a; }
+
+  /* ── buttons ── */
+  .btn-primary {
+    @apply px-4 py-2 rounded-lg font-semibold text-sm transition-all;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #e2e8f0;
+  }
+  .btn-primary:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+
+  .btn-ghost { @apply px-4 py-2 rounded-lg font-medium text-sm transition-colors; color: #7a7a8a; }
+  .btn-ghost:hover { color: #9aa0a6; background: rgba(255,255,255,0.04); }
+
+  /* ── nav (legacy, kept for compat) ── */
+  .nav-item          { @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer; }
+  .nav-item-active   { color: #e2c090; background: rgba(201,164,108,0.08); border: 1px solid rgba(201,164,108,0.2); }
+  .nav-item-inactive { color: #7a7a8a; }
+  .nav-item-inactive:hover { color: #9aa0a6; background: rgba(255,255,255,0.04); }
+
+  /* ── risk bars ── */
+  .risk-bar-high   { background: linear-gradient(90deg, #ef4444, #b91c1c); }
+  .risk-bar-medium { background: linear-gradient(90deg, #f59e0b, #b45309); }
+  .risk-bar-low    { background: linear-gradient(90deg, #10b981, #047857); }
+
+  /* ── glows ── */
+  .glow-danger { box-shadow: 0 0 20px rgba(239,68,68,0.12); }
+  .glow-brand  { box-shadow: 0 0 20px rgba(201,164,108,0.1); }
+
+  /* ── editorial page heading ── */
+  .page-label {
+    display: block; font-size: 11px; font-weight: 600; color: #c9a46c;
+    text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px;
+  }
+  .page-title {
+    font-size: 26px; font-weight: 700; color: #fff;
+    letter-spacing: -0.025em; line-height: 1.1; margin: 0;
+  }
+  .page-title .serif-dim {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-style: italic; font-weight: 400; color: rgba(255,255,255,0.25);
+  }
+  .page-sub {
+    font-size: 13px; color: #7a7a8a; margin-top: 6px;
+  }
+
+  /* ── section sub-header ── */
+  .section-header {
+    font-size: 11px; font-weight: 600; color: #7a7a8a;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+}

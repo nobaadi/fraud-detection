@@ -1,0 +1,28 @@
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local AI/tooling config
+.claude/
+
+# Python backend
+backend/venv/
+backend/.env
+backend/__pycache__/
+backend/**/*.pyc
+backend/**/*.pyo
+backend/**/*.pyd
+backend/app/models_cache/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Logs and temp
+*.log
+*.tmp
+
+# Accidental root npm lockfile from aborted scaffold
+/package-lock.json
