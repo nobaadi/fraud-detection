@@ -9,8 +9,11 @@ import type {
   ActivitySummary,
 } from '../types';
 
+const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+const apiBaseUrl = rawApiBaseUrl ? rawApiBaseUrl.replace(/\/+$/, '') : '/api';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: apiBaseUrl,
   timeout: 30000,
 });
 

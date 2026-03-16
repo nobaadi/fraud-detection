@@ -133,6 +133,63 @@ In a second terminal:
 
 ---
 
+## Deploy Guide (Vercel + Backend Host)
+
+Vercel is ideal for the React frontend. The FastAPI + ML backend should be deployed on a backend host (Render, Railway, Fly.io, or similar).
+
+### 1. Deploy Backend (Render recommended)
+
+Use Docker deployment with `backend/Dockerfile`.
+
+Set backend environment variables:
+
+- `DATABASE_URL` = your hosted Postgres connection string
+- `ENVIRONMENT` = `production`
+- `CORS_ORIGINS` = your Vercel frontend URL(s), comma-separated
+
+Example:
+
+```text
+CORS_ORIGINS=https://your-app.vercel.app,https://your-custom-domain.com
+```
+
+After deploy, verify:
+
+- `https://your-backend-url/health`
+
+### 2. Deploy Frontend on Vercel
+
+In Vercel project settings:
+
+- Framework Preset: `Vite`
+- Root Directory: `frontend`
+- Build Command: `npm run build`
+- Output Directory: `dist`
+
+Set frontend environment variable:
+
+- `VITE_API_BASE_URL` = your backend URL
+
+Example:
+
+```text
+VITE_API_BASE_URL=https://your-backend-url
+```
+
+### 3. Verify Deployment
+
+1. Open your Vercel URL.
+2. Go to Upload page and upload sample or custom CSV.
+3. Confirm Dashboard, Alerts, Analytics, Network pages load data.
+
+### Notes
+
+- The sample CSV is optional. Users can upload their own CSV if it follows required columns.
+- Frontend API base URL is environment-driven via `VITE_API_BASE_URL`.
+- CORS is environment-driven via `CORS_ORIGINS`.
+
+---
+
 ## Features
 
 | Feature | Description |

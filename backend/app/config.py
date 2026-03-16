@@ -5,6 +5,7 @@ from functools import lru_cache
 class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:postgres@localhost:5432/fraud_detection"
     environment: str = "development"
+    cors_origins: str = "http://localhost:3000,http://localhost:5173"
 
     class Config:
         env_file = ".env"
