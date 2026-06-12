@@ -2,6 +2,32 @@
 
 A professional financial fraud detection and investigation system built with FastAPI, PostgreSQL, scikit-learn, React, and TailwindCSS.
 
+## Live Demo
+
+The live deployment is split across two platforms:
+
+- Frontend: Vercel (React + Vite app in `frontend/`)
+- Backend API: Render Web Service (FastAPI app in `backend/`, deployed via `backend/Dockerfile`)
+
+Architecture flow:
+
+1. Browser loads frontend from Vercel.
+2. Frontend calls FastAPI endpoints on Render using `VITE_API_BASE_URL`.
+3. FastAPI reads/writes transaction data in PostgreSQL and returns analytics to the UI.
+
+Required environment variables:
+
+- Frontend (`frontend/.env` or Vercel Environment Variables)
+	- `VITE_API_BASE_URL=https://your-render-backend.onrender.com`
+- Backend (Render Environment Variables)
+	- `DATABASE_URL=<your-postgres-connection-string>`
+	- `ENVIRONMENT=production`
+	- `CORS_ORIGINS=https://your-app.vercel.app,https://your-custom-domain.com`
+
+Health check endpoint for Render:
+
+- `GET /health`
+
 ---
 
 ## Architecture

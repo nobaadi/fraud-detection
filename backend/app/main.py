@@ -7,6 +7,10 @@ from app.database import engine, Base
 from app.routers import transactions
 
 
+DEFAULT_CORS_ORIGINS = ["http://localhost:3000", "http://localhost:5173"]
+VERCEL_PREVIEW_ORIGIN_REGEX = r"https://.*\.vercel\.app"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
@@ -31,7 +35,7 @@ def parse_cors_origins(raw_origins: str) -> list[str]:
     origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
     if origins:
         return origins
-    return ["http://localhost:3000", "http://localhost:5173"]
+    return DEFAULT_CORS_ORIGINS
 
 
 settings = get_settings()
@@ -39,6 +43,7 @@ settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=parse_cors_origins(settings.cors_origins),
+    allow_origin_regex=VERCEL_PREVIEW_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
