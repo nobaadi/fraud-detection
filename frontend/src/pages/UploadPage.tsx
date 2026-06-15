@@ -38,13 +38,15 @@ export default function UploadPage() {
   }
 
   function downloadSample() {
+    const stamp = Date.now();
+    const tx = (n: number) => `TXN${stamp}${String(n).padStart(2, '0')}`;
     const csv = [
       'transaction_id,user_id,timestamp,amount,merchant,merchant_category,location,latitude,longitude,device_type',
-      'TXN000001,U00001,2024-06-15T10:30:00,45.99,Amazon,E-commerce,New York,40.7128,-74.0060,mobile_ios',
-      'TXN000002,U00001,2024-06-15T11:05:00,320.00,Best Buy,Electronics,Los Angeles,34.0522,-118.2437,desktop_chrome',
-      'TXN000003,U00002,2024-06-15T09:15:00,12.50,Starbucks,Food & Beverage,Chicago,41.8781,-87.6298,mobile_android',
-      'TXN000004,U00002,2024-06-15T09:20:00,2500.00,CryptoExchange Pro,Cryptocurrency,Tokyo,35.6762,139.6503,unknown_device',
-      'TXN000005,U00003,2024-06-15T14:00:00,89.99,Netflix,Entertainment,Houston,29.7604,-95.3698,tablet_ios',
+      `${tx(1)},U00001,2024-06-15T10:30:00,45.99,Amazon,E-commerce,New York,40.7128,-74.0060,mobile_ios`,
+      `${tx(2)},U00001,2024-06-15T11:05:00,320.00,Best Buy,Electronics,Los Angeles,34.0522,-118.2437,desktop_chrome`,
+      `${tx(3)},U00002,2024-06-15T09:15:00,12.50,Starbucks,Food & Beverage,Chicago,41.8781,-87.6298,mobile_android`,
+      `${tx(4)},U00002,2024-06-15T09:20:00,2500.00,CryptoExchange Pro,Cryptocurrency,Tokyo,35.6762,139.6503,unknown_device`,
+      `${tx(5)},U00003,2024-06-15T14:00:00,89.99,Netflix,Entertainment,Houston,29.7604,-95.3698,tablet_ios`,
     ].join('\n');
 
     const blob = new Blob([csv], { type: 'text/csv' });

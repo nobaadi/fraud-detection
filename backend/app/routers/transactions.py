@@ -247,6 +247,12 @@ async def upload_transactions(
     }
     df = df[~df["transaction_id"].astype(str).isin(existing_ids)]
 
+    # Fast path: if every incoming row already exists and no supervised retraining is required,
+    # return immediately to avoid running feature engineering on an empty dataframe.
+    needs_retrain = "fraud_label" in full_df.columns and load_model_metrics() is None
+    if df.empty and not needs_retrain:
+        return UploadResponse(records_ingested=0, processing_status="All records already exist")
+
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
     df["latitude"] = pd.to_numeric(df.get("latitude", pd.Series(np.nan)), errors="coerce")
@@ -258,7 +264,7 @@ async def upload_transactions(
     # If upload contains real labels and metrics are missing, train/retrain now.
     # This allows a second upload of the same file to still generate portfolio metrics.
     engine = get_scoring_engine()
-    if "fraud_label" in full_df.columns and load_model_metrics() is None:
+    if needs_retrain:
         train_df = full_df.copy()
         train_df["timestamp"] = pd.to_datetime(train_df["timestamp"])
         train_df["amount"] = pd.to_numeric(train_df["amount"], errors="coerce").fillna(0.0)
