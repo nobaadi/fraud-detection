@@ -78,3 +78,25 @@ export interface ActivitySummary {
   latest_amount: number | null;
   latest_probability: number | null;
 }
+
+export interface ModelMetrics {
+  timestamp: string;
+  dataset_size: number;
+  fraud_count: number;
+  fraud_rate: number;
+  precision: number;
+  recall: number;
+  f1_score: number;
+  roc_auc: number;
+  confusion_matrix: {
+    true_negatives: number;
+    false_positives: number;
+    false_negatives: number;
+    true_positives: number;
+  };
+  model_weights?: {
+    isolation_forest: number;
+    logistic_regression: number;
+    random_forest: number;
+  };
+}

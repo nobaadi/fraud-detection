@@ -7,6 +7,7 @@ import type {
   TrendData,
   NetworkGraph,
   ActivitySummary,
+  ModelMetrics,
 } from '../types';
 
 const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
@@ -78,6 +79,11 @@ export const transactionsApi = {
 
   reviewTransaction: async (id: string, status: string): Promise<Transaction> => {
     const { data } = await api.post<Transaction>(`/transactions/${id}/review`, { status });
+    return data;
+  },
+
+  getModelMetrics: async (): Promise<ModelMetrics> => {
+    const { data } = await api.get<ModelMetrics>('/transactions/metrics');
     return data;
   },
 };

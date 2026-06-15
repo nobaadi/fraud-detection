@@ -8,6 +8,7 @@ import {
   ChevronRight,
   RefreshCw,
   Upload,
+  BarChart3,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -77,6 +78,14 @@ export default function DashboardPage() {
     queryKey: ['trends'],
     queryFn: transactionsApi.getTrends,
     staleTime: 10_000,
+  });
+
+  const { data: modelMetrics, isLoading: loadingModelMetrics } = useQuery({
+    queryKey: ['model-metrics'],
+    queryFn: transactionsApi.getModelMetrics,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    retry: false,
   });
 
   const recentAlerts = alerts?.slice(0, 5) ?? [];
@@ -240,6 +249,63 @@ export default function DashboardPage() {
             })}
           </div>
         </div>
+      </div>
+
+      {/* Model performance */}
+      <div className="card border border-brand/15 bg-brand/5">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-brand/10 border border-brand/20">
+              <BarChart3 className="w-5 h-5 text-brand-light" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-white">Model Performance (Real Data)</h2>
+              <p className="text-xs text-slate-500">Live metrics from trained ensemble</p>
+            </div>
+          </div>
+          {modelMetrics && (
+            <span className="text-xs text-slate-500">
+              Trained on {modelMetrics.dataset_size.toLocaleString()} transactions
+            </span>
+          )}
+        </div>
+
+        {loadingModelMetrics ? (
+          <div className="py-8 text-center text-slate-500 text-sm">Loading model metrics...</div>
+        ) : !modelMetrics ? (
+          <div className="py-8 text-center text-slate-500 text-sm">
+            Metrics unavailable. Train the model first by uploading a dataset.
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+              <div className="p-3 rounded-lg border border-white/5 bg-surface-700/60">
+                <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">F1 Score</p>
+                <p className="text-xl font-bold text-white tabular-nums">{(modelMetrics.f1_score * 100).toFixed(2)}%</p>
+              </div>
+              <div className="p-3 rounded-lg border border-white/5 bg-surface-700/60">
+                <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">Precision</p>
+                <p className="text-xl font-bold text-warning-light tabular-nums">{(modelMetrics.precision * 100).toFixed(2)}%</p>
+              </div>
+              <div className="p-3 rounded-lg border border-white/5 bg-surface-700/60">
+                <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">Recall</p>
+                <p className="text-xl font-bold text-danger-light tabular-nums">{(modelMetrics.recall * 100).toFixed(2)}%</p>
+              </div>
+              <div className="p-3 rounded-lg border border-white/5 bg-surface-700/60">
+                <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">ROC-AUC</p>
+                <p className="text-xl font-bold text-success-light tabular-nums">{(modelMetrics.roc_auc * 100).toFixed(2)}%</p>
+              </div>
+            </div>
+
+            <div className="text-xs text-slate-500 flex flex-wrap gap-x-5 gap-y-1">
+              <span>Fraud cases: {modelMetrics.fraud_count.toLocaleString()} ({(modelMetrics.fraud_rate * 100).toFixed(2)}%)</span>
+              <span>TP: {modelMetrics.confusion_matrix.true_positives.toLocaleString()}</span>
+              <span>FP: {modelMetrics.confusion_matrix.false_positives.toLocaleString()}</span>
+              <span>FN: {modelMetrics.confusion_matrix.false_negatives.toLocaleString()}</span>
+              <span>TN: {modelMetrics.confusion_matrix.true_negatives.toLocaleString()}</span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Top fraud alerts */}
