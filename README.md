@@ -46,9 +46,9 @@ fraud-detection/
 │   │   └── routers/
 │   │       └── transactions.py     # All API endpoints
 │   ├── scripts/
-│   │   └── generate_dataset.py     # Synthetic dataset generator
+│   │   └── generate_dataset.py     # IEEE-CIS Kaggle dataset downloader + mapper
 │   └── data/
-│       └── transactions.csv        # Sample dataset (2080 transactions)
+│       └── transactions.csv        # Real mapped dataset (~590k transactions)
 ├── frontend/                 # React + TypeScript
 │   └── src/
 │       ├── pages/            # Dashboard, Alerts, Investigate, Network, Analytics, Upload
@@ -107,14 +107,16 @@ pip install fastapi "uvicorn[standard]" sqlalchemy alembic pandas numpy scikit-l
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 3. Generate Sample Data
+### 3. Generate Real Dataset (IEEE-CIS)
 
 ```bash
 cd backend
 python scripts/generate_dataset.py
 ```
 
-The dataset is saved to `backend/data/transactions.csv` (2080 transactions, 80 users).
+This downloads/processes IEEE-CIS data from Kaggle (with mirror fallback) and saves mapped output to `backend/data/transactions.csv`.
+
+Typical output size: `590,540` transactions with real fraud labels.
 
 ### 4. Upload Data via UI
 
@@ -154,8 +156,9 @@ In a second terminal:
 
 - Frontend TypeScript build passes (`npm run build`).
 - Backend health endpoint responds at `/health`.
-- Core endpoints verified locally: upload, overview, alerts, trends, network.
-- This is a portfolio/demo app using synthetic data, not a production banking system.
+- Core endpoints verified locally and in production: upload, overview, alerts, trends, network, metrics.
+- Current model metrics (real data): `F1: 0.40 | ROC-AUC: 0.97 | Trained on 590,540 transactions`.
+- Explainability includes SHAP value contributions on transaction investigation pages.
 
 ---
 
@@ -224,6 +227,7 @@ VITE_API_BASE_URL=https://your-backend-url
 | Fraud Signal Engineering | Amount deviation, location jump, velocity, merchant novelty, device novelty |
 | ML Ensemble Scoring | Isolation Forest + Logistic Regression + Random Forest |
 | Explainable AI | Human-readable risk factor explanations per transaction |
+| SHAP Explainability | Per-feature contribution bars (positive/negative impact) on investigation page |
 | Fraud Dashboard | Overview stats, risk distribution, daily alerts chart |
 | Alerts Table | All suspicious transactions sorted by risk score |
 | Transaction Investigation | Full risk breakdown with user + merchant history |
@@ -237,6 +241,7 @@ VITE_API_BASE_URL=https://your-backend-url
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/transactions/upload` | Upload CSV and run fraud analysis |
+| GET | `/transactions/metrics` | Model metrics + summary string for portfolio/reviewer display |
 | GET | `/transactions/overview` | Dashboard statistics |
 | GET | `/transactions/alerts` | Fraud alerts (filtered by risk level) |
 | GET | `/transactions/{id}` | Transaction detail + risk explanation |
@@ -245,6 +250,16 @@ VITE_API_BASE_URL=https://your-backend-url
 | GET | `/transactions/analytics/trends` | Trend analytics data |
 | GET | `/transactions/analytics/network` | Fraud network graph |
 | POST | `/transactions/score` | Re-score transactions |
+
+---
+
+## Reviewer Quick Check
+
+Use these to validate live deployment quickly:
+
+- Backend health: `https://fraud-detection-303p.onrender.com/health`
+- Backend metrics: `https://fraud-detection-303p.onrender.com/transactions/metrics`
+- Frontend dashboard: `https://fraud-detection-jade.vercel.app/dashboard`
 
 ---
 

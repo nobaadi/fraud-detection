@@ -10,11 +10,16 @@ Thumbs.db
 # Python backend
 backend/venv/
 backend/.env
+backend/*.db
 backend/__pycache__/
 backend/**/*.pyc
 backend/**/*.pyo
 backend/**/*.pyd
 backend/app/models_cache/
+backend/data/train_*.csv
+backend/data/test_*.csv
+backend/data/sample_submission.csv
+backend/data/*.zip
 
 # Frontend
 frontend/node_modules/
