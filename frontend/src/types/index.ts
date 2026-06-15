@@ -82,6 +82,7 @@ export interface ActivitySummary {
 
 export interface ModelMetrics {
   timestamp: string;
+  summary?: string;
   dataset_size: number;
   fraud_count: number;
   fraud_rate: number;

@@ -101,6 +101,9 @@ export default function DashboardPage() {
 
   const recentAlerts = alerts?.slice(0, 5) ?? [];
   const dailyData = trends?.daily_alerts?.slice(-14) ?? [];
+  const metricsSummary = modelMetrics?.summary ?? (modelMetrics
+    ? `F1: ${modelMetrics.f1_score.toFixed(2)} | ROC-AUC: ${modelMetrics.roc_auc.toFixed(2)} | Trained on ${modelMetrics.dataset_size.toLocaleString()} transactions`
+    : null);
 
   // ── Loading state ─────────────────────────────────────────────────────────
   if (loadingOverview) {
@@ -118,6 +121,25 @@ export default function DashboardPage() {
     return (
       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
         minHeight:'80vh', textAlign:'center', padding:'0 24px' }}>
+        <div className="w-full max-w-5xl mb-6">
+          <div className="card border border-brand/15 bg-brand/5">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Model Snapshot</p>
+                <p className="text-sm text-slate-200">
+                  {loadingModelMetrics ? 'Loading model metrics...' : (metricsSummary ?? 'Metrics unavailable')}
+                </p>
+              </div>
+              {modelMetrics && (
+                <div className="text-right">
+                  <p className="text-xl font-bold text-success-light tabular-nums">{modelMetrics.roc_auc.toFixed(2)} ROC-AUC</p>
+                  <p className="text-xs text-slate-500">Live score from trained ensemble</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div style={{ width:56, height:56, borderRadius:14, background:'rgba(201,164,108,0.1)',
           border:'1px solid rgba(201,164,108,0.22)', display:'flex', alignItems:'center', justifyContent:'center',
           marginBottom:24 }}>
@@ -207,6 +229,23 @@ export default function DashboardPage() {
   // ── Full dashboard ────────────────────────────────────────────────────────
   return (
     <div className="p-8 space-y-8">
+      <div className="card border border-brand/15 bg-brand/5">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Model Snapshot</p>
+            <p className="text-sm text-slate-200">
+              {loadingModelMetrics ? 'Loading model metrics...' : (metricsSummary ?? 'Metrics unavailable')}
+            </p>
+          </div>
+          {modelMetrics && (
+            <div className="text-right">
+              <p className="text-xl font-bold text-success-light tabular-nums">{modelMetrics.roc_auc.toFixed(2)} ROC-AUC</p>
+              <p className="text-xs text-slate-500">Live score from trained ensemble</p>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

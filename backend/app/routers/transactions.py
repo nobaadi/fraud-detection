@@ -558,6 +558,13 @@ def get_model_metrics():
             status_code=404,
             detail="Model metrics not available. Upload data to train the model first."
         )
+
+    dataset_size = int(metrics.get("dataset_size", 0) or 0)
+    f1_score = float(metrics.get("f1_score", 0.0) or 0.0)
+    roc_auc = float(metrics.get("roc_auc", 0.0) or 0.0)
+    metrics["summary"] = (
+        f"F1: {f1_score:.2f} | ROC-AUC: {roc_auc:.2f} | Trained on {dataset_size:,} transactions"
+    )
     return metrics
 
 
