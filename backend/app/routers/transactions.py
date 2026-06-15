@@ -1,14 +1,21 @@
 import io
 import json
+import os
+import tempfile
+import traceback
+import urllib.request
+import uuid
+import zipfile
 import pandas as pd
 import numpy as np
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from pathlib import Path
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, BackgroundTasks, Body, Header
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from datetime import datetime
 
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models import Transaction
 from app.schemas import (
     UploadResponse, TransactionResponse, FraudScore,
@@ -23,6 +30,190 @@ REQUIRED_COLUMNS = {
     "transaction_id", "user_id", "timestamp", "amount",
     "merchant", "merchant_category", "location", "device_type"
 }
+
+SEED_JOBS: Dict[str, Dict[str, Any]] = {}
+
+
+def _map_kaggle_raw_to_schema(df: pd.DataFrame) -> pd.DataFrame:
+    """Map raw IEEE-CIS transaction columns to app schema."""
+    result = pd.DataFrame()
+    card_proxy = None
+    for card_col in ["card1", "card2", "card3", "card4", "card5", "card6"]:
+        if card_col in df.columns:
+            card_proxy = df[card_col].astype(str)
+            break
+    if card_proxy is None:
+        card_proxy = pd.Series(np.arange(len(df)).astype(str), index=df.index)
+
+    result["transaction_id"] = df.get("TransactionID", pd.Series(np.arange(len(df)), index=df.index)).astype(str)
+    result["user_id"] = "U" + card_proxy.str.replace(".0", "", regex=False).str.zfill(5)
+    result["amount"] = pd.to_numeric(df.get("TransactionAmt", 0.0), errors="coerce").fillna(0.0)
+
+    product = df.get("ProductCD", pd.Series("Unknown", index=df.index)).fillna("Unknown")
+    product_map = {
+        "W": "Retail_W",
+        "H": "Health_H",
+        "S": "Services_S",
+        "C": "Credit_C",
+        "R": "Transport_R",
+    }
+    result["merchant"] = product.map(product_map).fillna("Merchant_Other")
+    result["merchant_category"] = product
+
+    addr1 = df.get("addr1", pd.Series("unknown", index=df.index)).astype(str)
+    addr2 = df.get("addr2", pd.Series("unknown", index=df.index)).astype(str)
+    result["location"] = "LOC_" + addr1.str[:4] + "_" + addr2.str[:4]
+
+    base_date = datetime(2024, 1, 1)
+    days = np.linspace(0, 180, len(df)).astype(int)
+    hours = np.random.randint(6, 24, len(df))
+    minutes = np.random.randint(0, 60, len(df))
+    result["timestamp"] = [
+        (base_date + pd.Timedelta(days=int(d), hours=int(h), minutes=int(m))).isoformat()
+        for d, h, m in zip(days, hours, minutes)
+    ]
+
+    if "DeviceType" in df.columns:
+        result["device_type"] = df["DeviceType"].fillna("desktop_unknown")
+    else:
+        device_options = ["mobile_ios", "mobile_android", "desktop_chrome", "desktop_safari", "tablet_ios"]
+        result["device_type"] = np.random.choice(device_options, len(df))
+
+    np.random.seed(42)
+    lat_base = 25.0 + (pd.to_numeric(df.get("addr1", 0), errors="coerce").fillna(0) % 100) / 2.0
+    lon_base = -120.0 + (pd.to_numeric(df.get("addr2", 0), errors="coerce").fillna(0) % 100) / 2.0
+    result["latitude"] = lat_base + np.random.randn(len(df)) * 0.35
+    result["longitude"] = lon_base + np.random.randn(len(df)) * 0.35
+
+    if "isFraud" in df.columns:
+        result["fraud_label"] = pd.to_numeric(df["isFraud"], errors="coerce").fillna(0).astype(int)
+
+    return result
+
+
+def _load_seed_dataframe(source_url: Optional[str]) -> pd.DataFrame:
+    """Load either an already-mapped CSV or raw Kaggle train_transaction CSV/ZIP."""
+    if not source_url:
+        default_path = Path(__file__).resolve().parents[2] / "data" / "transactions.csv"
+        if not default_path.exists():
+            raise RuntimeError("Default mapped dataset not found at backend/data/transactions.csv")
+        return pd.read_csv(default_path)
+
+    if source_url.startswith("http://") or source_url.startswith("https://"):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "seed_source"
+            urllib.request.urlretrieve(source_url, str(target))
+            if str(source_url).lower().endswith(".zip"):
+                with zipfile.ZipFile(target, "r") as zf:
+                    zf.extractall(tmp)
+                csv_candidates = list(Path(tmp).rglob("transactions.csv")) + list(Path(tmp).rglob("train_transaction.csv"))
+                if not csv_candidates:
+                    raise RuntimeError("Zip did not contain transactions.csv or train_transaction.csv")
+                return pd.read_csv(csv_candidates[0])
+            return pd.read_csv(target)
+
+    source_path = Path(source_url)
+    if not source_path.exists():
+        raise RuntimeError(f"Seed source path not found: {source_url}")
+    if source_path.suffix.lower() == ".zip":
+        with tempfile.TemporaryDirectory() as tmp:
+            with zipfile.ZipFile(source_path, "r") as zf:
+                zf.extractall(tmp)
+            csv_candidates = list(Path(tmp).rglob("transactions.csv")) + list(Path(tmp).rglob("train_transaction.csv"))
+            if not csv_candidates:
+                raise RuntimeError("Zip did not contain transactions.csv or train_transaction.csv")
+            return pd.read_csv(csv_candidates[0])
+    return pd.read_csv(source_path)
+
+
+def _run_seed_job(job_id: str, source_url: Optional[str], persist_records: bool, max_records: Optional[int]):
+    """Background job that loads data, trains model, and optionally persists records."""
+    db = SessionLocal()
+    try:
+        SEED_JOBS[job_id] = {"status": "running", "step": "loading_data"}
+        raw_df = _load_seed_dataframe(source_url)
+        if max_records and max_records > 0:
+            raw_df = raw_df.head(max_records)
+
+        if "transaction_id" not in raw_df.columns:
+            raw_df = _map_kaggle_raw_to_schema(raw_df)
+
+        if "fraud_label" not in raw_df.columns and "isFraud" in raw_df.columns:
+            raw_df["fraud_label"] = pd.to_numeric(raw_df["isFraud"], errors="coerce").fillna(0).astype(int)
+
+        SEED_JOBS[job_id] = {"status": "running", "step": "engineering_features", "rows": len(raw_df)}
+        raw_df["timestamp"] = pd.to_datetime(raw_df["timestamp"])
+        raw_df["amount"] = pd.to_numeric(raw_df["amount"], errors="coerce").fillna(0.0)
+        raw_df["latitude"] = pd.to_numeric(raw_df.get("latitude", pd.Series(np.nan)), errors="coerce")
+        raw_df["longitude"] = pd.to_numeric(raw_df.get("longitude", pd.Series(np.nan)), errors="coerce")
+        train_df = engineer_features_bulk(raw_df)
+
+        SEED_JOBS[job_id] = {"status": "running", "step": "training_models", "rows": len(train_df)}
+        engine = get_scoring_engine()
+        engine.train(train_df)
+
+        ingested = 0
+        if persist_records:
+            SEED_JOBS[job_id] = {"status": "running", "step": "scoring_and_persisting", "rows": len(train_df)}
+            scores = engine.score(train_df)
+            score_map = {s["transaction_id"]: s for s in scores}
+
+            existing_ids = {row[0] for row in db.query(Transaction.transaction_id).all()}
+            persist_df = train_df[~train_df["transaction_id"].astype(str).isin(existing_ids)]
+
+            records = []
+            for _, row in persist_df.iterrows():
+                tid = str(row["transaction_id"])
+                score = score_map.get(tid, {})
+                records.append(Transaction(
+                    transaction_id=tid,
+                    user_id=str(row["user_id"]),
+                    timestamp=row["timestamp"],
+                    amount=float(row["amount"]),
+                    merchant=str(row["merchant"]),
+                    merchant_category=str(row["merchant_category"]),
+                    location=str(row["location"]),
+                    latitude=row.get("latitude") if not pd.isna(row.get("latitude", np.nan)) else None,
+                    longitude=row.get("longitude") if not pd.isna(row.get("longitude", np.nan)) else None,
+                    device_type=str(row["device_type"]),
+                    amount_deviation=float(row.get("amount_deviation", 0)),
+                    location_deviation=float(row.get("location_deviation", 0)),
+                    transaction_velocity=int(row.get("transaction_velocity", 0)),
+                    merchant_novelty=bool(row.get("merchant_novelty", False)),
+                    device_novelty=bool(row.get("device_novelty", False)),
+                    fraud_probability=score.get("fraud_probability"),
+                    risk_level=score.get("risk_level"),
+                    risk_factors=json.dumps(score.get("risk_factors", [])),
+                ))
+
+            chunk_size = 5000
+            for i in range(0, len(records), chunk_size):
+                db.bulk_save_objects(records[i:i + chunk_size])
+                db.commit()
+            ingested = len(records)
+
+        metrics = load_model_metrics() or {}
+        SEED_JOBS[job_id] = {
+            "status": "completed",
+            "rows_processed": int(len(train_df)),
+            "rows_ingested": int(ingested),
+            "metrics": {
+                "precision": metrics.get("precision"),
+                "recall": metrics.get("recall"),
+                "f1_score": metrics.get("f1_score"),
+                "roc_auc": metrics.get("roc_auc"),
+                "dataset_size": metrics.get("dataset_size"),
+            },
+        }
+    except Exception as e:
+        db.rollback()
+        SEED_JOBS[job_id] = {
+            "status": "failed",
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+        }
+    finally:
+        db.close()
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -368,6 +559,51 @@ def get_model_metrics():
 def get_model_metrics_alias():
     """Compatibility alias for model metrics endpoint."""
     return get_model_metrics()
+
+
+@router.post("/seed/real-data")
+def seed_real_data(
+    background_tasks: BackgroundTasks,
+    payload: Dict[str, Any] = Body(default={}),
+    x_admin_token: Optional[str] = Header(default=None),
+):
+    """Start a background seed job that trains from real IEEE-CIS data on the server side."""
+    required_token = os.getenv("SEED_JOB_TOKEN")
+    if required_token and x_admin_token != required_token:
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Admin-Token")
+
+    source_url = payload.get("source_url")
+    persist_records = bool(payload.get("persist_records", False))
+    max_records = payload.get("max_records")
+    if max_records is not None:
+        try:
+            max_records = int(max_records)
+        except Exception:
+            raise HTTPException(status_code=400, detail="max_records must be an integer")
+
+    job_id = str(uuid.uuid4())
+    SEED_JOBS[job_id] = {
+        "status": "queued",
+        "source_url": source_url,
+        "persist_records": persist_records,
+        "max_records": max_records,
+    }
+    background_tasks.add_task(_run_seed_job, job_id, source_url, persist_records, max_records)
+
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "status_endpoint": f"/transactions/seed/jobs/{job_id}",
+    }
+
+
+@router.get("/seed/jobs/{job_id}")
+def get_seed_job_status(job_id: str):
+    """Get background seed job status and summary metrics."""
+    job = SEED_JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Seed job not found")
+    return job
 
 
 @router.get("/{transaction_id}", response_model=TransactionResponse)
