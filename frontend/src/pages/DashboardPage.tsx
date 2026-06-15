@@ -260,7 +260,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <h2 className="text-base font-semibold text-white">Model Performance (Real Data)</h2>
-              <p className="text-xs text-slate-500">Live metrics from trained ensemble</p>
+              <p className="text-xs text-slate-500">Live model metrics from trained ensemble</p>
             </div>
           </div>
           {modelMetrics && (
