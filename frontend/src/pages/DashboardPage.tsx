@@ -60,6 +60,10 @@ function StatCard({
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+  const metricsEndpointUrl = rawApiBaseUrl
+    ? `${rawApiBaseUrl.replace(/\/+$/, '')}/transactions/metrics`
+    : '/transactions/metrics';
 
   const { data: overview, isLoading: loadingOverview, refetch: refetchOverview } = useQuery({
     queryKey: ['overview'],
@@ -87,6 +91,13 @@ export default function DashboardPage() {
     refetchInterval: 120_000,
     retry: false,
   });
+
+  const formattedLastTrained = modelMetrics?.timestamp
+    ? new Date(modelMetrics.timestamp).toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : null;
 
   const recentAlerts = alerts?.slice(0, 5) ?? [];
   const dailyData = trends?.daily_alerts?.slice(-14) ?? [];
@@ -141,6 +152,18 @@ export default function DashboardPage() {
               <div>
                 <h2 className="text-base font-semibold text-white">Model Performance (Real Data)</h2>
                 <p className="text-xs text-slate-500">Visible even before dashboard data is uploaded</p>
+                <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
+                  <span>Last trained: {formattedLastTrained ?? 'Unavailable'}</span>
+                  <span aria-hidden="true">•</span>
+                  <a
+                    href={metricsEndpointUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-brand-light hover:text-brand"
+                  >
+                    View raw metrics
+                  </a>
+                </div>
               </div>
             </div>
             {modelMetrics && (
@@ -307,6 +330,18 @@ export default function DashboardPage() {
             <div>
               <h2 className="text-base font-semibold text-white">Model Performance (Real Data)</h2>
               <p className="text-xs text-slate-500">Live model metrics from trained ensemble</p>
+              <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
+                <span>Last trained: {formattedLastTrained ?? 'Unavailable'}</span>
+                <span aria-hidden="true">•</span>
+                <a
+                  href={metricsEndpointUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-brand-light hover:text-brand"
+                >
+                  View raw metrics
+                </a>
+              </div>
             </div>
           </div>
           {modelMetrics && (
