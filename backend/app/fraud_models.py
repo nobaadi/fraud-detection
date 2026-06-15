@@ -21,6 +21,7 @@ FEATURE_COLUMNS = [
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "models_cache")
 METRICS_PATH = os.path.join(os.path.dirname(__file__), "models_cache", "model_metrics.json")
+FALLBACK_METRICS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "model_metrics.json")
 
 
 def _ensure_model_dir():
@@ -30,12 +31,13 @@ def _ensure_model_dir():
 
 def load_model_metrics() -> Optional[Dict[str, Any]]:
     """Load computed model metrics from file."""
-    if os.path.exists(METRICS_PATH):
-        try:
-            with open(METRICS_PATH, "r") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"Error loading metrics: {e}")
+    for path in [METRICS_PATH, FALLBACK_METRICS_PATH]:
+        if os.path.exists(path):
+            try:
+                with open(path, "r") as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading metrics from {path}: {e}")
     return None
 
 
@@ -302,6 +304,14 @@ class FraudScoringEngine:
         _ensure_model_dir()
         with open(METRICS_PATH, "w") as f:
             json.dump(metrics, f, indent=2)
+        # Also save a tracked fallback copy for production/read-only environments.
+        try:
+            fallback_dir = os.path.dirname(FALLBACK_METRICS_PATH)
+            os.makedirs(fallback_dir, exist_ok=True)
+            with open(FALLBACK_METRICS_PATH, "w") as f:
+                json.dump(metrics, f, indent=2)
+        except Exception as e:
+            print(f"Warning: unable to write fallback metrics: {e}")
         
         print(f"\n✓ Model Metrics Saved:")
         print(f"  Precision: {precision:.4f}")
