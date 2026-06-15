@@ -18,6 +18,7 @@ export interface Transaction {
   fraud_probability?: number;
   risk_level?: 'Low' | 'Medium' | 'High';
   risk_factors?: string;
+  shap_values?: Record<string, number>;
   review_status?: string | null;
   created_at: string;
 }

@@ -6,7 +6,7 @@ psycopg2-binary==2.9.9
 pandas==2.2.0
 numpy==1.26.3
 scikit-learn==1.4.0
-shap==0.44.0
+shap==0.52.0
 python-multipart==0.0.6
 pydantic==2.5.3
 pydantic-settings==2.1.0

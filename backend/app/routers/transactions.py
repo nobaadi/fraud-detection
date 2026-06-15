@@ -620,7 +620,22 @@ def get_transaction(transaction_id: str, db: Session = Depends(get_db)):
     ).first()
     if not t:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    return t
+
+    engine = get_scoring_engine()
+    shap_values = {}
+    if engine._trained:
+        shap_values = engine.get_shap_values_for_row({
+            "amount_deviation": t.amount_deviation or 0,
+            "location_deviation": t.location_deviation or 0,
+            "transaction_velocity": t.transaction_velocity or 0,
+            "merchant_novelty": t.merchant_novelty or False,
+            "device_novelty": t.device_novelty or False,
+            "amount": t.amount or 0,
+        })
+
+    payload = TransactionResponse.model_validate(t).model_dump()
+    payload["shap_values"] = shap_values
+    return payload
 
 
 @router.get("/{transaction_id}/user-history", response_model=List[TransactionResponse])

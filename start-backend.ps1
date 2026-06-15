@@ -26,7 +26,7 @@ try {
 
 if ($reqExit -ne 0) {
     Write-Host "requirements.txt install failed (likely Python version compatibility). Falling back to runtime package set..." -ForegroundColor Yellow
-    & .\venv\Scripts\python.exe -m pip install fastapi "uvicorn[standard]" sqlalchemy alembic pandas numpy scikit-learn python-multipart pydantic pydantic-settings python-dotenv scipy networkx psycopg2-binary
+    & .\venv\Scripts\python.exe -m pip install fastapi "uvicorn[standard]" sqlalchemy alembic pandas numpy scikit-learn python-multipart pydantic pydantic-settings python-dotenv scipy networkx psycopg2-binary shap
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Failed to install backend dependencies." -ForegroundColor Red
         exit 1

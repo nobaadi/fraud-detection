@@ -55,13 +55,89 @@ class FraudScoringEngine:
         self.random_forest: Optional[RandomForestClassifier] = None
         self.scaler = StandardScaler()
         self._trained = False
+        self._rf_explainer = None
+        self._shap_unavailable_logged = False
 
-    def _extract_features(self, df: pd.DataFrame) -> np.ndarray:
+    def _import_shap(self):
+        """Import SHAP lazily to avoid hard startup failures on incompatible local environments."""
+        try:
+            import shap as shap_module
+            return shap_module
+        except Exception as e:
+            if not self._shap_unavailable_logged:
+                print(f"Warning: SHAP unavailable; explainability values disabled. {e}")
+                self._shap_unavailable_logged = True
+            return None
+
+    def _extract_features_df(self, df: pd.DataFrame) -> pd.DataFrame:
         features = df[FEATURE_COLUMNS].copy()
         features["merchant_novelty"] = features["merchant_novelty"].astype(float)
         features["device_novelty"] = features["device_novelty"].astype(float)
         features = features.fillna(0.0)
+        return features
+
+    def _extract_features(self, df: pd.DataFrame) -> np.ndarray:
+        features = self._extract_features_df(df)
         return features.values
+
+    def _get_rf_explainer(self):
+        if self.random_forest is None:
+            return None
+        shap_module = self._import_shap()
+        if shap_module is None:
+            return None
+        if self._rf_explainer is None:
+            self._rf_explainer = shap_module.TreeExplainer(self.random_forest)
+        return self._rf_explainer
+
+    def get_shap_values_for_row(self, row: Dict[str, Any]) -> Dict[str, float]:
+        """Return SHAP values for a single transaction row using the Random Forest model."""
+        if self.random_forest is None:
+            return {}
+
+        row_df = pd.DataFrame([{
+            "amount_deviation": float(row.get("amount_deviation", 0.0) or 0.0),
+            "location_deviation": float(row.get("location_deviation", 0.0) or 0.0),
+            "transaction_velocity": float(row.get("transaction_velocity", 0.0) or 0.0),
+            "merchant_novelty": bool(row.get("merchant_novelty", False)),
+            "device_novelty": bool(row.get("device_novelty", False)),
+            "amount": float(row.get("amount", 0.0) or 0.0),
+        }])
+        features_df = self._extract_features_df(row_df)
+
+        try:
+            explainer = self._get_rf_explainer()
+            if explainer is None:
+                return {}
+
+            shap_values = explainer.shap_values(features_df)
+            values_array = np.asarray(shap_values)
+
+            # SHAP output varies by version/model type.
+            if isinstance(shap_values, list):
+                class_values = shap_values[1] if len(shap_values) > 1 else shap_values[0]
+                contributions = np.asarray(class_values)[0]
+            elif values_array.ndim == 2:
+                contributions = values_array[0]
+            elif values_array.ndim == 3:
+                if values_array.shape[0] == 1 and values_array.shape[1] == len(FEATURE_COLUMNS):
+                    class_idx = 1 if values_array.shape[2] > 1 else 0
+                    contributions = values_array[0, :, class_idx]
+                elif values_array.shape[1] == 1 and values_array.shape[2] == len(FEATURE_COLUMNS):
+                    class_idx = 1 if values_array.shape[0] > 1 else 0
+                    contributions = values_array[class_idx, 0, :]
+                else:
+                    return {}
+            else:
+                return {}
+
+            return {
+                feature: float(contributions[idx])
+                for idx, feature in enumerate(FEATURE_COLUMNS)
+            }
+        except Exception as e:
+            print(f"Warning: SHAP computation failed: {e}")
+            return {}
 
     def train(self, df: pd.DataFrame):
         """Train all models on the provided transaction dataframe with engineered features."""
@@ -115,6 +191,7 @@ class FraudScoringEngine:
             n_jobs=-1
         )
         self.random_forest.fit(X, y)
+        self._rf_explainer = None
 
         self._trained = True
 
@@ -344,6 +421,7 @@ class FraudScoringEngine:
         self.logistic_reg = data["logistic_reg"]
         self.random_forest = data["random_forest"]
         self._trained = data["trained"]
+        self._rf_explainer = None
         return True
 
 

@@ -7,6 +7,17 @@ import RiskScoreGauge from '../components/RiskScoreGauge';
 import RiskExplanation from '../components/RiskExplanation';
 import TransactionTable from '../components/TransactionTable';
 import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ReferenceLine,
+  Cell,
+} from 'recharts';
+import {
   ArrowLeft,
   User,
   Store,
@@ -36,6 +47,48 @@ function SignalPill({ label, value, active }: { label: string; value: string | n
     }`}>
       <span className={`text-lg font-bold tabular-nums ${active ? 'text-warning-light' : 'text-white'}`}>{value}</span>
       <span className={`text-xs mt-0.5 ${active ? 'text-warning/80' : 'text-slate-500'}`}>{label}</span>
+    </div>
+  );
+}
+
+const FEATURE_LABELS: Record<string, string> = {
+  amount_deviation: 'Amount Deviation',
+  location_deviation: 'Location Deviation',
+  transaction_velocity: 'Transaction Velocity',
+  merchant_novelty: 'Merchant Novelty',
+  device_novelty: 'Device Novelty',
+  amount: 'Transaction Amount',
+};
+
+const FEATURE_EXPLANATIONS: Record<string, string> = {
+  amount_deviation: 'How far this amount is from the user\'s normal spending behavior.',
+  location_deviation: 'Distance from the user\'s recent transaction locations.',
+  transaction_velocity: 'How quickly this user is making transactions in a short time window.',
+  merchant_novelty: 'Whether this merchant is new for this user.',
+  device_novelty: 'Whether this device has been seen for this user before.',
+  amount: 'Raw transaction amount, which can increase or decrease risk depending on context.',
+};
+
+function ShapTooltip({ active, payload }: { active?: boolean; payload?: any[] }) {
+  if (!active || !payload || payload.length === 0) {
+    return null;
+  }
+
+  const item = payload[0]?.payload;
+  if (!item) {
+    return null;
+  }
+
+  const direction = item.value >= 0 ? 'Pushes toward fraud risk' : 'Pushes away from fraud risk';
+  const directionColor = item.value >= 0 ? '#fca5a5' : '#6ee7b7';
+
+  return (
+    <div className="rounded-lg border border-surface-600 bg-surface-800 p-3 max-w-xs shadow-lg">
+      <p className="text-sm font-semibold text-white mb-1">{item.label}</p>
+      <p className="text-xs text-slate-400 mb-2">{item.description}</p>
+      <p className="text-xs" style={{ color: directionColor }}>
+        {direction} ({item.value.toFixed(4)})
+      </p>
     </div>
   );
 }
@@ -113,6 +166,15 @@ export default function InvestigatePage() {
   const amountDev = tx.amount_deviation ?? 0;
   const locDev = tx.location_deviation ?? 0;
   const velocity = tx.transaction_velocity ?? 0;
+  const shapChartData = Object.entries(tx.shap_values ?? {})
+    .map(([feature, value]) => ({
+      feature,
+      value,
+      label: FEATURE_LABELS[feature] ?? feature,
+      description: FEATURE_EXPLANATIONS[feature] ?? 'Feature contribution to model output.',
+    }))
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  const chartHeight = Math.max(240, shapChartData.length * 44);
 
   return (
     <div className="p-8 space-y-6">
@@ -264,15 +326,50 @@ export default function InvestigatePage() {
           </div>
         </div>
 
-        {/* Right: Risk explanation */}
-        <div className="card">
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-warning" /> Risk Factors
-          </h2>
-          <RiskExplanation
-            riskFactors={tx.risk_factors}
-            fraudProbability={tx.fraud_probability}
-          />
+        {/* Right: Risk explanation + SHAP */}
+        <div className="space-y-6">
+          <div className="card">
+            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-warning" /> Risk Factors
+            </h2>
+            <RiskExplanation
+              riskFactors={tx.risk_factors}
+              fraudProbability={tx.fraud_probability}
+            />
+          </div>
+
+          <div className="card">
+            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              Explainability Analysis (SHAP values)
+            </h2>
+            <p className="text-xs text-slate-500 mb-4">Why this was flagged</p>
+
+            {shapChartData.length === 0 ? (
+              <div className="text-sm text-slate-500 italic">SHAP values unavailable for this transaction.</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={chartHeight}>
+                <BarChart data={shapChartData} layout="vertical" margin={{ left: 8, right: 20, top: 8, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis type="number" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis
+                    dataKey="label"
+                    type="category"
+                    width={130}
+                    tick={{ fill: '#94a3b8', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <ReferenceLine x={0} stroke="rgba(255,255,255,0.2)" />
+                  <Tooltip content={<ShapTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                  <Bar dataKey="value" radius={[4, 4, 4, 4]}>
+                    {shapChartData.map((entry) => (
+                      <Cell key={entry.feature} fill={entry.value >= 0 ? '#ef4444' : '#10b981'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict
 from datetime import datetime
 
 
@@ -49,6 +49,7 @@ class TransactionResponse(TransactionBase):
     fraud_probability: Optional[float] = None
     risk_level: Optional[str] = None
     risk_factors: Optional[str] = None
+    shap_values: Optional[Dict[str, float]] = None
     review_status: Optional[str] = None
     created_at: datetime
 
