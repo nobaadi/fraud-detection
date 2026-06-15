@@ -4,10 +4,7 @@ import os
 
 
 class Settings(BaseSettings):
-    database_url: str = os.getenv(
-        "DATABASE_URL",
-        "postgresql://postgres:postgres@localhost:5432/fraud_detection"
-    )
+    database_url: str | None = os.getenv("DATABASE_URL")
 
     environment: str = "development"
     cors_origins: str = "http://localhost:3000,http://localhost:5173"

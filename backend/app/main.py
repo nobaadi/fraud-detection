@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import text
 from app.config import get_settings
 from app.database import engine, Base
@@ -13,13 +14,18 @@ VERCEL_PREVIEW_ORIGIN_REGEX = r"https://.*\.vercel\.app"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
-    # Safely add new columns to existing tables
-    with engine.connect() as conn:
-        conn.execute(text(
-            "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS review_status VARCHAR(32)"
-        ))
-        conn.commit()
+    try:
+        Base.metadata.create_all(bind=engine)
+        # Safely add new columns to existing tables
+        with engine.connect() as conn:
+            conn.execute(text(
+                "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS review_status VARCHAR(32)"
+            ))
+            conn.commit()
+    except SQLAlchemyError:
+        # Keep the API process alive even if the database is not reachable yet.
+        # Core read-only routes can still serve while the database is being configured.
+        pass
     yield
 
 
