@@ -16,10 +16,15 @@ backend/**/*.pyc
 backend/**/*.pyo
 backend/**/*.pyd
 backend/app/models_cache/
+backend/.kaggle/
 backend/data/train_*.csv
 backend/data/test_*.csv
 backend/data/sample_submission.csv
 backend/data/*.zip
+backend/data/generated/
+backend/data/*.parquet
+backend/data/*.feather
+backend/fraud_detection.db-*
 
 # Frontend
 frontend/node_modules/

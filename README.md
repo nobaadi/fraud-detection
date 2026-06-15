@@ -253,13 +253,47 @@ VITE_API_BASE_URL=https://your-backend-url
 
 ---
 
-## Reviewer Quick Check
+## How To Review This Project
 
-Use these to validate live deployment quickly:
+Use this 2-minute checklist for employer/reviewer verification.
 
-- Backend health: `https://fraud-detection-303p.onrender.com/health`
-- Backend metrics: `https://fraud-detection-303p.onrender.com/transactions/metrics`
-- Frontend dashboard: `https://fraud-detection-jade.vercel.app/dashboard`
+### 1) Backend health
+
+- URL: `https://fraud-detection-303p.onrender.com/health`
+- Expected output:
+
+```json
+{"status":"ok","service":"Fraud Intelligence Platform"}
+```
+
+### 2) Model metrics (real-data proof)
+
+- URL: `https://fraud-detection-303p.onrender.com/transactions/metrics`
+- Expected fields in response:
+	- `f1_score`
+	- `roc_auc`
+	- `dataset_size`
+	- `summary`
+- Example summary value:
+
+```text
+F1: 0.40 | ROC-AUC: 0.97 | Trained on 590,540 transactions
+```
+
+### 3) Frontend dashboard
+
+- URL: `https://fraud-detection-jade.vercel.app/dashboard`
+- Expected UI:
+	- `Model Snapshot` bar at top with live metrics summary.
+	- `Model Performance (Real Data)` card with F1/Precision/Recall/ROC-AUC.
+
+### 4) Explainability page
+
+- From Dashboard, open a transaction in `Top Fraud Alerts`.
+- Expected UI on `/investigate/{transaction_id}`:
+	- `Explainability Analysis (SHAP values)` section.
+	- Horizontal contribution bars (red = pushes toward fraud, green = pushes away).
+	- Tooltip with plain-English feature explanation on hover.
 
 ---
 
