@@ -5,8 +5,10 @@ from sklearn.ensemble import IsolationForest, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
 import pickle
 import os
+import json
 
 FEATURE_COLUMNS = [
     "amount_deviation",
@@ -18,10 +20,23 @@ FEATURE_COLUMNS = [
 ]
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "models_cache")
+METRICS_PATH = os.path.join(os.path.dirname(__file__), "models_cache", "model_metrics.json")
 
 
 def _ensure_model_dir():
+    """Ensure models cache directory exists."""
     os.makedirs(MODEL_PATH, exist_ok=True)
+
+
+def load_model_metrics() -> Optional[Dict[str, Any]]:
+    """Load computed model metrics from file."""
+    if os.path.exists(METRICS_PATH):
+        try:
+            with open(METRICS_PATH, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading metrics: {e}")
+    return None
 
 
 class FraudScoringEngine:
@@ -50,20 +65,34 @@ class FraudScoringEngine:
         """Train all models on the provided transaction dataframe with engineered features."""
         X = self._extract_features(df)
 
-        # Isolation Forest — unsupervised
-        self.isolation_forest = IsolationForest(
-            n_estimators=200,
-            contamination=0.05,
-            random_state=42,
-            n_jobs=-1
-        )
-        self.isolation_forest.fit(X)
+        # Check for real fraud labels
+        has_real_labels = "fraud_label" in df.columns
+        if has_real_labels:
+            y = df["fraud_label"].astype(int).values
+            print(f"Training with {len(y)} real fraud labels. Fraud rate: {y.mean():.2%}")
+        else:
+            # Fallback: generate pseudo-labels
+            self.isolation_forest = IsolationForest(
+                n_estimators=200,
+                contamination=0.05,
+                random_state=42,
+                n_jobs=-1
+            )
+            self.isolation_forest.fit(X)
+            if_scores = self.isolation_forest.decision_function(X)
+            threshold = np.percentile(if_scores, 10)
+            y = (if_scores < threshold).astype(int)
+            print(f"Training with pseudo-labels from Isolation Forest. Fraud rate: {y.mean():.2%}")
 
-        # Generate pseudo-labels from isolation forest for supervised models
-        if_scores = self.isolation_forest.decision_function(X)
-        # Convert to 0/1 labels: bottom 10% = fraud
-        threshold = np.percentile(if_scores, 10)
-        pseudo_labels = (if_scores < threshold).astype(int)
+        # Isolation Forest — unsupervised (always trained for feature extraction)
+        if not has_real_labels or self.isolation_forest is None:
+            self.isolation_forest = IsolationForest(
+                n_estimators=200,
+                contamination=0.05,
+                random_state=42,
+                n_jobs=-1
+            )
+            self.isolation_forest.fit(X)
 
         # Logistic Regression
         self.logistic_reg = Pipeline([
@@ -74,7 +103,7 @@ class FraudScoringEngine:
                 random_state=42
             ))
         ])
-        self.logistic_reg.fit(X, pseudo_labels)
+        self.logistic_reg.fit(X, y)
 
         # Random Forest
         self.random_forest = RandomForestClassifier(
@@ -83,9 +112,14 @@ class FraudScoringEngine:
             random_state=42,
             n_jobs=-1
         )
-        self.random_forest.fit(X, pseudo_labels)
+        self.random_forest.fit(X, y)
 
         self._trained = True
+
+        # Compute and save metrics if real labels available
+        if has_real_labels:
+            self._compute_and_save_metrics(X, y)
+
         _ensure_model_dir()
         self._save()
 
@@ -213,6 +247,69 @@ class FraudScoringEngine:
         if self.random_forest is None:
             return {}
         return dict(zip(FEATURE_COLUMNS, self.random_forest.feature_importances_))
+
+    def _compute_and_save_metrics(self, X: np.ndarray, y_true: np.ndarray):
+        """Compute classification metrics and save to JSON file."""
+        if self.logistic_reg is None or self.random_forest is None:
+            return
+
+        # Get predictions from ensemble
+        if_probs = self._isolation_forest_probability(X)
+        lr_probs = self.logistic_reg.predict_proba(X)[:, 1]
+        rf_probs = self.random_forest.predict_proba(X)[:, 1]
+        ensemble_probs = 0.35 * if_probs + 0.30 * lr_probs + 0.35 * rf_probs
+        
+        # Binary predictions (threshold 0.5)
+        y_pred = (ensemble_probs >= 0.5).astype(int)
+        
+        # Compute metrics
+        precision = precision_score(y_true, y_pred, zero_division=0)
+        recall = recall_score(y_true, y_pred, zero_division=0)
+        f1 = f1_score(y_true, y_pred, zero_division=0)
+        
+        # ROC-AUC (on probabilities)
+        try:
+            roc_auc = roc_auc_score(y_true, ensemble_probs)
+        except:
+            roc_auc = 0.0
+        
+        # Confusion matrix
+        tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+        
+        metrics = {
+            "timestamp": pd.Timestamp.now().isoformat(),
+            "dataset_size": len(y_true),
+            "fraud_count": int(y_true.sum()),
+            "fraud_rate": float(y_true.mean()),
+            "precision": float(precision),
+            "recall": float(recall),
+            "f1_score": float(f1),
+            "roc_auc": float(roc_auc),
+            "confusion_matrix": {
+                "true_negatives": int(tn),
+                "false_positives": int(fp),
+                "false_negatives": int(fn),
+                "true_positives": int(tp),
+            },
+            "model_weights": {
+                "isolation_forest": 0.35,
+                "logistic_regression": 0.30,
+                "random_forest": 0.35,
+            }
+        }
+        
+        # Save metrics to file
+        _ensure_model_dir()
+        with open(METRICS_PATH, "w") as f:
+            json.dump(metrics, f, indent=2)
+        
+        print(f"\n✓ Model Metrics Saved:")
+        print(f"  Precision: {precision:.4f}")
+        print(f"  Recall: {recall:.4f}")
+        print(f"  F1 Score: {f1:.4f}")
+        print(f"  ROC-AUC: {roc_auc:.4f}")
+        print(f"  True Positives: {tp}, False Positives: {fp}")
+        print(f"  False Negatives: {fn}, True Negatives: {tn}")
 
     def _train_default(self, df: pd.DataFrame):
         """Train with available data as a fallback."""

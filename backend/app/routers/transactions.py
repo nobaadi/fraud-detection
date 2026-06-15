@@ -2,7 +2,7 @@ import io
 import json
 import pandas as pd
 import numpy as np
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
@@ -15,7 +15,7 @@ from app.schemas import (
     OverviewStats, NetworkGraph, NetworkNode, NetworkEdge, ReviewRequest
 )
 from app.feature_engineering import engineer_features_bulk
-from app.fraud_models import get_scoring_engine
+from app.fraud_models import get_scoring_engine, load_model_metrics
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -47,21 +47,37 @@ async def upload_transactions(
             detail=f"Missing required columns: {', '.join(missing)}"
         )
 
-    # Deduplicate against existing records
+    # Keep full upload for optional supervised retraining from real labels.
+    full_df = df.copy()
+
+    # Deduplicate against existing records for DB writes.
     existing_ids = {
         row[0] for row in db.query(Transaction.transaction_id).all()
     }
     df = df[~df["transaction_id"].astype(str).isin(existing_ids)]
-    if df.empty:
-        return UploadResponse(records_ingested=0, processing_status="All records already exist")
 
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
     df["latitude"] = pd.to_numeric(df.get("latitude", pd.Series(np.nan)), errors="coerce")
     df["longitude"] = pd.to_numeric(df.get("longitude", pd.Series(np.nan)), errors="coerce")
 
-    # Engineer features
+    # Engineer features for incoming rows.
     df = engineer_features_bulk(df)
+
+    # If upload contains real labels and metrics are missing, train/retrain now.
+    # This allows a second upload of the same file to still generate portfolio metrics.
+    engine = get_scoring_engine()
+    if "fraud_label" in full_df.columns and load_model_metrics() is None:
+        train_df = full_df.copy()
+        train_df["timestamp"] = pd.to_datetime(train_df["timestamp"])
+        train_df["amount"] = pd.to_numeric(train_df["amount"], errors="coerce").fillna(0.0)
+        train_df["latitude"] = pd.to_numeric(train_df.get("latitude", pd.Series(np.nan)), errors="coerce")
+        train_df["longitude"] = pd.to_numeric(train_df.get("longitude", pd.Series(np.nan)), errors="coerce")
+        train_df = engineer_features_bulk(train_df)
+        engine.train(train_df)
+
+    if df.empty:
+        return UploadResponse(records_ingested=0, processing_status="All records already exist")
 
     # Cross-batch correction: fix novelty and location signals using existing DB records
     user_ids_in_batch = df["user_id"].astype(str).unique().tolist()
@@ -110,7 +126,6 @@ async def upload_transactions(
         df = df.apply(fix_row, axis=1)
 
     # Train / score
-    engine = get_scoring_engine()
     if not engine._trained:
         engine.train(df)
 
@@ -335,6 +350,24 @@ def get_activity_summary(db: Session = Depends(get_db)):
         "latest_amount": float(latest.amount) if latest else None,
         "latest_probability": float(latest.fraud_probability) if latest else None,
     }
+
+
+@router.get("/metrics/model", response_model=Optional[Dict[str, Any]])
+def get_model_metrics():
+    """Return trained model performance metrics."""
+    metrics = load_model_metrics()
+    if not metrics:
+        raise HTTPException(
+            status_code=404,
+            detail="Model metrics not available. Upload data to train the model first."
+        )
+    return metrics
+
+
+@router.get("/metrics", response_model=Optional[Dict[str, Any]])
+def get_model_metrics_alias():
+    """Compatibility alias for model metrics endpoint."""
+    return get_model_metrics()
 
 
 @router.get("/{transaction_id}", response_model=TransactionResponse)
