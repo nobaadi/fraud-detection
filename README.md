@@ -1,6 +1,14 @@
-# Fraud Intelligence Platform
+# FraudIQ: Fraud Intelligence Platform
 
-A professional financial fraud detection and investigation system built with FastAPI, PostgreSQL, scikit-learn, React, and TailwindCSS.
+End-to-end fraud detection stack: engineered transaction features, an ensemble ML model (Isolation Forest + Logistic Regression + Random Forest), and a React operator dashboard with SHAP-based explainability.
+
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.4-F7931E?logo=scikitlearn&logoColor=white)](https://scikit-learn.org)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://typescriptlang.org)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white)](https://postgresql.org)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docker.com)
 
 ## Live Demo
 
@@ -8,6 +16,8 @@ The live deployment is split across two platforms:
 
 - Frontend: Vercel (React + Vite app in `frontend/`)
 - Backend API: Render Web Service (FastAPI app in `backend/`, deployed via `backend/Dockerfile`)
+
+> **Cold start note:** The backend runs on Render's free tier, which spins down after 15 minutes of inactivity. The first request after a period of no traffic may take 20-40 seconds to respond. This is a hosting constraint, not an application bug. Subsequent requests are fast.
 
 Architecture flow:
 
@@ -158,6 +168,7 @@ In a second terminal:
 - Backend health endpoint responds at `/health`.
 - Core endpoints verified locally and in production: upload, overview, alerts, trends, network, metrics.
 - Current model metrics (real data): `F1: 0.40 | ROC-AUC: 0.97 | Trained on 590,540 transactions`.
+- **Why F1 is 0.40 while ROC-AUC is 0.97:** The IEEE-CIS dataset has a 3.5% fraud rate. At this imbalance, the default 0.5 decision threshold is optimistic toward the majority class, suppressing recall and pulling F1 down. ROC-AUC is the correct discriminative metric for imbalanced fraud detection -- it measures rank ordering across all thresholds rather than performance at one threshold. The ensemble correctly ranks 97% of fraud-legitimate pairs. Threshold calibration to the business's preferred precision/recall trade-off is a deployment-time decision, not a model quality issue.
 - Explainability includes SHAP value contributions on transaction investigation pages.
 
 ---
