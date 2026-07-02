@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Any, Optional
 from sklearn.ensemble import IsolationForest, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
@@ -24,7 +24,7 @@ METRICS_PATH = os.path.join(os.path.dirname(__file__), "models_cache", "model_me
 FALLBACK_METRICS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "model_metrics.json")
 
 
-def _ensure_model_dir():
+def _ensure_model_dir() -> None:
     """Ensure models cache directory exists."""
     os.makedirs(MODEL_PATH, exist_ok=True)
 
@@ -49,7 +49,7 @@ class FraudScoringEngine:
     - Random Forest (supervised, feature importance)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.isolation_forest: Optional[IsolationForest] = None
         self.logistic_reg: Optional[Pipeline] = None
         self.random_forest: Optional[RandomForestClassifier] = None
@@ -58,7 +58,7 @@ class FraudScoringEngine:
         self._rf_explainer = None
         self._shap_unavailable_logged = False
 
-    def _import_shap(self):
+    def _import_shap(self) -> Any:
         """Import SHAP lazily to avoid hard startup failures on incompatible local environments."""
         try:
             import shap as shap_module
@@ -139,7 +139,7 @@ class FraudScoringEngine:
             print(f"Warning: SHAP computation failed: {e}")
             return {}
 
-    def train(self, df: pd.DataFrame):
+    def train(self, df: pd.DataFrame) -> None:
         """Train all models on the provided transaction dataframe with engineered features."""
         X = self._extract_features(df)
 
@@ -296,7 +296,7 @@ class FraudScoringEngine:
 
         return factors
 
-    def retrain_with_reviews(self, df: pd.DataFrame, reviewed_labels: dict):
+    def retrain_with_reviews(self, df: pd.DataFrame, reviewed_labels: dict) -> None:
         """
         Retrain supervised models incorporating analyst review labels as ground truth.
         reviewed_labels: dict of {transaction_id: 1 (fraud) or 0 (not fraud)}
@@ -327,7 +327,7 @@ class FraudScoringEngine:
             return {}
         return dict(zip(FEATURE_COLUMNS, self.random_forest.feature_importances_))
 
-    def _compute_and_save_metrics(self, X: np.ndarray, y_true: np.ndarray):
+    def _compute_and_save_metrics(self, X: np.ndarray, y_true: np.ndarray) -> None:
         """Compute classification metrics and save to JSON file."""
         if self.logistic_reg is None or self.random_forest is None:
             return
@@ -398,11 +398,11 @@ class FraudScoringEngine:
         print(f"  True Positives: {tp}, False Positives: {fp}")
         print(f"  False Negatives: {fn}, True Negatives: {tn}")
 
-    def _train_default(self, df: pd.DataFrame):
+    def _train_default(self, df: pd.DataFrame) -> None:
         """Train with available data as a fallback."""
         self.train(df)
 
-    def _save(self):
+    def _save(self) -> None:
         with open(os.path.join(MODEL_PATH, "models.pkl"), "wb") as f:
             pickle.dump({
                 "isolation_forest": self.isolation_forest,
