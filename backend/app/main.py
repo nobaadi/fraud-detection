@@ -6,6 +6,7 @@ from sqlalchemy import text
 from app.config import get_settings
 from app.database import engine, Base
 from app.routers import transactions
+from app.seed import seed_database
 
 
 DEFAULT_CORS_ORIGINS = ["http://localhost:3000", "http://localhost:5173"]
@@ -26,6 +27,7 @@ async def lifespan(app: FastAPI):
         # Keep the API process alive even if the database is not reachable yet.
         # Core read-only routes can still serve while the database is being configured.
         pass
+    seed_database()
     yield
 
 
