@@ -264,70 +264,81 @@ VITE_API_BASE_URL=https://your-backend-url
 
 ---
 
-## How To Review This Project
+## Dataset
 
-Use this 2-minute checklist for employer/reviewer verification.
+**IEEE-CIS Fraud Detection** -- Kaggle competition dataset published by Vesta Corporation.
 
-### 1) Backend health
+- Source: [kaggle.com/c/ieee-fraud-detection](https://www.kaggle.com/c/ieee-fraud-detection)
+- Size: 590,540 transactions across two CSV files (`train_transaction.csv`, `train_identity.csv`)
+- Fraud rate: 3.5% (20,663 fraudulent transactions)
+- Features: 434 raw columns including card type, billing address, device fingerprint, email domain, and Vesta's proprietary `V1-V339` engineered features (meaning undisclosed per NDA)
+- Time span: approximately 6 months of production e-commerce transactions
 
-- URL: `https://fraud-detection-303p.onrender.com/health`
-- Expected output:
+**Why real data instead of synthetic:** Fraud patterns are high-dimensional and non-obvious. Synthetic generators produce transactions that look plausible but lack the correlation structures (e.g. card BIN clustering, device reuse patterns, email domain fraud rates) that make the problem hard. A model trained on synthetic data routinely fails on real transactions. Using the IEEE-CIS dataset means the model is evaluated against the same distribution it would encounter in production, and the ROC-AUC of 0.97 reflects real discriminative performance.
 
-```json
-{"status":"ok","service":"Fraud Intelligence Platform"}
-```
+The `backend/scripts/generate_dataset.py` script downloads and maps the raw Kaggle CSVs to the application's transaction schema. Run it once before uploading data through the UI.
 
-### 2) Model metrics (real-data proof)
+---
 
-- URL: `https://fraud-detection-303p.onrender.com/transactions/metrics`
-- Expected fields in response:
-	- `f1_score`
-	- `roc_auc`
-	- `dataset_size`
-	- `summary`
-- Example summary value:
+## ML Pipeline
 
-```text
-F1: 0.40 | ROC-AUC: 0.97 | Trained on 590,540 transactions
-```
+Four sequential stages from raw CSV to per-transaction risk score:
 
-### 3) Frontend dashboard
+### 1. Feature Engineering (`feature_engineering.py`)
 
-- URL: `https://fraud-detection-jade.vercel.app/dashboard`
-- Expected UI:
-	- `Model Snapshot` bar at top with live metrics summary.
-	- `Model Performance (Real Data)` card with F1/Precision/Recall/ROC-AUC.
+The 434 raw IEEE-CIS columns are reduced to 6 interpretable features that map cleanly to fraud investigation workflows:
 
-### 4) Explainability page
+| Feature | Computation | Fraud signal |
+|---------|-------------|--------------|
+| `amount_deviation` | z-score of transaction amount vs. the user's historical mean and std | Unusual amounts relative to user behaviour |
+| `location_deviation` | Haversine distance (km) from user's previous transaction | Impossible travel / location jump |
+| `transaction_velocity` | Count of transactions by same user in the past hour | Card testing / velocity attack |
+| `merchant_novelty` | Boolean: first time user transacts at this merchant | Account takeover at unfamiliar merchant |
+| `device_novelty` | Boolean: first time this device fingerprint appears for this user | New device = potential credential theft |
+| `amount` | Raw transaction amount | High-value transactions carry higher absolute risk |
 
-- From Dashboard, open a transaction in `Top Fraud Alerts`.
-- Expected UI on `/investigate/{transaction_id}`:
-	- `Explainability Analysis (SHAP values)` section.
-	- Horizontal contribution bars (red = pushes toward fraud, green = pushes away).
-	- Tooltip with plain-English feature explanation on hover.
+### 2. Model Training (`fraud_models.py`)
+
+Training runs as a two-pass semi-supervised approach due to the absence of ground-truth labels after the upload step:
+
+- **Pass 1 -- Isolation Forest (35% weight):** Unsupervised anomaly detection on the 6-feature matrix. Contamination parameter set to 0.05 (slightly above the 3.5% fraud rate to account for near-miss anomalies). Produces pseudo-labels for pass 2.
+- **Pass 2a -- Logistic Regression (30% weight):** Supervised model trained on Isolation Forest pseudo-labels. Class weights balanced to compensate for imbalance. Coefficients are directly interpretable as feature importance.
+- **Pass 2b -- Random Forest (35% weight):** Ensemble model trained on pseudo-labels. Provides feature importance scores used to rank SHAP contributions in the investigation UI.
+
+Ensemble score = `0.35 * IF_score + 0.30 * LR_score + 0.35 * RF_score`.
+
+### 3. Threshold Calibration
+
+The default ensemble score is continuous [0, 1]. Risk buckets are set at deployment time:
+
+- High risk: score >= 0.65
+- Medium risk: 0.35 <= score < 0.65
+- Low risk: score < 0.35
+
+These thresholds are configurable. A fraud operations team would tune them based on investigator capacity (how many alerts can be reviewed per day) and acceptable false-positive rate. The `/transactions/score` endpoint allows re-scoring with different thresholds without retraining.
+
+### 4. Inference and Explainability
+
+At inference time, each transaction's 6 features are computed in real-time from transaction history, scored by the ensemble, and stored in PostgreSQL. The investigation page (`/investigate/{id}`) shows:
+
+- SHAP values: per-feature contribution to the final score (positive = pushes toward fraud, negative = pushes away)
+- Human-readable risk factor text generated from the feature values
+- User history and merchant history pulled from the same database
 
 ---
 
 ## Fraud Detection Models
 
 **Isolation Forest** (35% weight)
-Unsupervised anomaly detection. Detects statistical outliers in multi-dimensional feature space.
+Unsupervised anomaly detection. Detects statistical outliers in multi-dimensional feature space without requiring fraud labels.
 
 **Logistic Regression** (30% weight)
-Supervised model trained on pseudo-labels from Isolation Forest. Interpretable coefficients.
+Supervised model trained on pseudo-labels from Isolation Forest. Interpretable coefficients map directly to feature importance.
 
 **Random Forest** (35% weight)
-Ensemble model providing feature importance scores for explainability.
-
-**Features used:**
-- `amount_deviation` — z-score of transaction amount vs user history
-- `location_deviation` — km distance from user's previous transaction
-- `transaction_velocity` — number of transactions in past hour
-- `merchant_novelty` — first time user transacts at this merchant
-- `device_novelty` — first time this device is used by user
-- `amount` — absolute transaction amount
+Ensemble model providing feature importance scores used for SHAP explainability.
 
 **Risk thresholds:**
-- High: ≥ 65%
-- Medium: 35–64%
+- High: >= 65%
+- Medium: 35-64%
 - Low: < 35%
