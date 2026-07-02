@@ -34,9 +34,9 @@ def test_haversine_same_point_is_zero():
 
 
 def test_haversine_singapore_to_kl():
-    # Singapore (1.35, 103.82) to Kuala Lumpur (3.14, 101.69) ≈ 315-340 km
+    # Singapore (1.3521, 103.8198) to Kuala Lumpur (3.1390, 101.6869) ≈ 309 km
     dist = haversine_distance(1.3521, 103.8198, 3.1390, 101.6869)
-    assert 310 < dist < 360
+    assert 300 < dist < 360
 
 
 def test_haversine_symmetric():
@@ -64,7 +64,9 @@ def test_amount_deviation_zero_for_second_transaction_same_amount():
 
 
 def test_amount_deviation_high_for_unusual_amount():
-    rows = [_base_row(f"t{i}", timestamp=f"2024-01-0{i+1} 10:00:00", amount=100.0) for i in range(4)]
+    # Varying base amounts so expanding std is non-zero for the 5th row
+    amounts = [90.0, 95.0, 100.0, 105.0]
+    rows = [_base_row(f"t{i}", timestamp=f"2024-01-0{i+1} 10:00:00", amount=amounts[i]) for i in range(4)]
     rows.append(_base_row("t5", timestamp="2024-01-05 10:00:00", amount=2000.0))
     df = pd.DataFrame(rows)
     result = engineer_features_bulk(df)
